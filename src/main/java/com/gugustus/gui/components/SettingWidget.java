@@ -118,7 +118,12 @@ public class SettingWidget {
     public int getHeight() {
         if (setting instanceof NumberSetting) return 24;
         if (setting instanceof BooleanSetting) return 18;
-        if (setting instanceof ModeSetting) return 24;
+        if (setting instanceof ModeSetting) {
+            if (modeDropdownOpen) {
+                return 24 + ((ModeSetting) setting).getModes().length * 15;
+            }
+            return 24;
+        }
         return 18;
     }
 }

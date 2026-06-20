@@ -5,6 +5,7 @@ import com.gugustus.module.Module;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
 import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
@@ -53,10 +54,12 @@ public class Panel {
         // Scissor region: content area below header
         int contentTop = y + HEADER_HEIGHT;
         int contentBottom = y + height - 5;
-        int scissorX = x;
-        int scissorY = Minecraft.getMinecraft().displayHeight - contentBottom;
-        int scissorW = width;
-        int scissorH = contentBottom - contentTop;
+        ScaledResolution sr = new ScaledResolution(Minecraft.getMinecraft());
+        int scale = sr.getScaleFactor();
+        int scissorX = x * scale;
+        int scissorY = Minecraft.getMinecraft().displayHeight - (contentBottom * scale);
+        int scissorW = width * scale;
+        int scissorH = (contentBottom - contentTop) * scale;
 
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
         GL11.glScissor(scissorX, scissorY, scissorW, scissorH);

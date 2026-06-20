@@ -133,9 +133,9 @@ public class ModuleCard {
     }
 
     public int getTotalHeight() {
-        int total = CARD_HEIGHT;
+        int total = CARD_HEIGHT + CARD_MARGIN;
         if (settingsExpanded) {
-            total += 2 + calculateDropdownHeight() + CARD_MARGIN;
+            total += 2 + calculateDropdownHeight();
         }
         return total;
     }
