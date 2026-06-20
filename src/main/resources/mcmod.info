@@ -1,0 +1,15 @@
+[
+{
+  "modid": "gugustus",
+  "name": "Gugustus Reborn",
+  "description": "A client-side utility mod providing PvP and movement enhancements with a modern glassmorphic ClickGUI.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "authorList": ["Gugustus Team"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]

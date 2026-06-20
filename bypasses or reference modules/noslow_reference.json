@@ -1,0 +1,86 @@
+{
+  "module": "NoSlow",
+  "client": "Cryptix 5.7.4",
+  "category": "MOVEMENT",
+  "description": "Removes or reduces the movement speed penalty when using items (eating, blocking, bow pulling). Multiple bypass modes for different anti-cheats.",
+  "hooks_used": ["onPreMotion", "onPostMotion", "onPreUpdate", "onPreInput", "onSprint", "onDisable"],
+  "fields": {
+    "tick": "int - counter incremented each onPreMotion call while using item, reset to 0 when not using",
+    "blinking": "boolean - whether blink packet queue is active (Alpha mode)",
+    "rotated": "boolean - set true when Beta mode rotates head away (used in onPreInput to suppress jump)"
+  },
+  "settings": [
+    {
+      "name": "Mode",
+      "type": "ModeBox",
+      "default": "Vanilla",
+      "options": ["Vanilla", "Post", "Alpha", "Beta", "Gamma", "NoGround"],
+      "description": "Bypass method for the slowdown effect"
+    }
+  ],
+  "modes": {
+    "Vanilla": {
+      "description": "Does nothing special. Relies on the client not applying the slowness (server-side only). Minimal bypass.",
+      "behavior": "No custom actions in any hook."
+    },
+    "Post": {
+      "description": "Unblocks onPreMotion, then re-blocks onPostMotion to cancel the slowdown while keeping the server-side block state.",
+      "onPreMotion": "If holding sword and using item: send C07PacketPlayerDigging(RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.UP)",
+      "onPostMotion": "If using item and holding sword: send C08PacketPlayerBlockPlacement(heldItem) to re-block"
+    },
+    "Alpha": {
+      "description": "Uses blink (packet queuing) to avoid sending the usage packets. Also applies movement input multiplier.",
+      "onPreInput": "If using item and moving: moveForward *= 0.2, moveStrafe *= 0.2, keyBindSprint.pressed = true",
+      "onPreMotion": "Stops blink on first tick when not using item anymore. Otherwise: starts blink (queues packets).",
+      "note": "Uses BlinkUtils to hide packets while using items"
+    },
+    "Beta": {
+      "description": "Rotates head 180 degrees away (yaw head = movement yaw + 180 - 45) while using items. Tricks anti-cheats that check head rotation vs item use.",
+      "onPreMotion": "mc.thePlayer.rotationYawHead = RotationUtils.getMovementYaw() + 180 (minus 45 if not jumping while grounded), sets rotated=true",
+      "onPreUpdate": "Sets Client.movefix = true to remap movement for the fake yaw",
+      "onPreInput": "If using item and moving: moveForward *= 0.2, moveStrafe *= 0.2, keyBindSprint.pressed = true. If rotated: block jump.",
+      "onSprint": "Forces sprinting if moving forward and not colliding horizontally"
+    },
+    "Gamma": {
+      "description": "Uses item swap trick with ground fake block placement on tick 1 to bypass slowdown. Also forces sprint.",
+      "onPreMotion": "When tick == 1 and NOT holding sword: send C09PacketHeldItemChange((current+1)%9), then C09PacketHeldItemChange(current), then C08PacketPlayerBlockPlacement(BlockPos(-1,-1,-1), ...).",
+      "onSprint": "Forces sprinting (mc.thePlayer.setSprinting(true))"
+    },
+    "NoGround": {
+      "description": "Disables NoFall spoofing while using items (prevents conflict between the two modules).",
+      "onPreMotion": "Client.instance.moduleManager.noFall.spoof = false"
+    }
+  },
+  "event_flow": {
+    "onPreMotion": "First updates display name. If not using item: reset tick/blinking. Otherwise: execute mode-specific logic, then tick++.",
+    "onPostMotion": "Only Post mode: re-block after movement.",
+    "onPreUpdate": "Only Beta mode: enable movefix.",
+    "onPreInput": "Alpha/Beta modes: apply movement multiplier and force sprint. Beta: suppress jump if rotated.",
+    "onSprint": "Beta/Gamma modes: force sprinting.",
+    "onDisable": "Reset tick to 0."
+  },
+  "dependencies": {
+    "internal": [
+      "cryptix.Client (static instance, moduleManager, movefix flag)",
+      "cryptix.gui.clickgui.Setting",
+      "cryptix.utils.BlinkUtils (packet queuing for Alpha mode)",
+      "cryptix.utils.MovementUtils (isMoving())",
+      "cryptix.utils.RotationUtils (getMovementYaw() for Beta head rotation)",
+      "cryptix.utils.Utils (holdingSword())"
+    ],
+    "minecraft": [
+      "net.minecraft.network.play.client.C07PacketPlayerDigging (RELEASE_USE_ITEM)",
+      "net.minecraft.network.play.client.C08PacketPlayerBlockPlacement",
+      "net.minecraft.network.play.client.C09PacketHeldItemChange",
+      "net.minecraft.util.BlockPos, EnumFacing"
+    ]
+  },
+  "implementation_notes": [
+    "The module extends the same abstract Module class as KillAura, with the same hook system.",
+    "The key mechanic is that while mc.thePlayer.isUsingItem() returns true, the player's movement is slowed server-side. Each bypass mode finds a way to either cancel the usage, hide it, or compensate for the slowdown.",
+    "Beta mode's head rotation uses the movement yaw calculation (which accounts for forward/strafe key inputs). The -45 offset is skipped when jumping to avoid flagging.",
+    "Gamma mode's tick==1 condition means it only fires on the second preMotion call while using an item (the first tick is reserved for detecting the item use start).",
+    "The display name shows the current mode as a suffix (e.g., 'NoSlow §7 Beta').",
+    "NoSlow is referenced by the KillAura Legit autoblock mode: if NoSlow is not toggled, Legit mode sets nextTick = -1 to enable the movement slow in its own onPreInput."
+  ]
+}

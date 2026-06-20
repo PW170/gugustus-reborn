@@ -1,0 +1,12 @@
+﻿{
+  "module": "Velocity",
+  "mode": "Watchdog Modern",
+  "modeIndex": 14,
+  "source": "myau/module/modules/Velocity.java",
+  "description": "We Use Ur Dih to Remove KnockBack :D",
+  "code": {
+    "onTick": "case 14: IAccessorTimer timer = (IAccessorTimer) ((IAccessorMinecraft) mc).getTimer(); if (timerTicks > 0 && timer.getTimerSpeed() <= 1) { float speed = 0.8f + (0.2f * (20 - timerTicks) / 20); timer.setTimerSpeed(Math.min(speed, 1f)); --timerTicks; } else if (timer.getTimerSpeed() <= 1) { timer.setTimerSpeed(1f); } break;",
+    "onPacket": "case 14: if (player.onGround || player.fallDistance < 0.5) { hasReceivedVelocity = true; event.setCancelled(true); } break;"
+  },
+  "notes": "Watchdog Modern mode (listed as 'Hypixel Morden' in the mode selector) cancels velocity packets when on ground or close to ground, then uses a timer speed manipulation to gradually restore normal tick rate over 20 ticks."
+}

@@ -1,0 +1,60 @@
+{
+  "module": "ChestStealer",
+  "client": "Cryptix 5.7.4",
+  "category": "PLAYER",
+  "description": "Automatically steals all items from chests. Supports configurable delays, auto-closing, and name-based chest filtering.",
+  "hooks_used": ["onEnable", "onPreMotion"],
+  "fields": {
+    "delay": "int - tick counter for delay between shift-click operations, incremented when items remain in chest",
+    "startDelay": "int - tick counter for initial delay before any stealing begins"
+  },
+  "settings": [
+    { "name": "Start Delay (Ticks)", "type": "Slider", "default": 2, "min": 0, "max": 10, "integer": true, "description": "Ticks to wait after opening chest before stealing" },
+    { "name": "Delay (Ticks)", "type": "Slider", "default": 2, "min": 0, "max": 10, "integer": true, "description": "Ticks between each item shift-click" },
+    { "name": "Auto Close", "type": "CheckBox", "default": true, "description": "Automatically close the chest when all items are taken" },
+    { "name": "Custom Chest", "type": "CheckBox", "default": false, "description": "If false, only steals from chests named 'Chest', 'Large Chest', or 'Ender Chest'. If true, steals from any container regardless of name." }
+  ],
+  "behavior": {
+    "onEnable": "Reset delay counter to 0.",
+    "onPreMotion": {
+      "condition": "mc.thePlayer.openContainer instanceof ContainerChest",
+      "start_delay": "If startDelay <= Start Delay setting value, increment startDelay and return early (wait before stealing)",
+      "custom_chest_check": "If Custom Chest is OFF: verify the chest name is exactly 'Chest', 'Large Chest', or 'Ender Chest' via getLowerChestInventory().getName()",
+      "stealing": {
+        "loop": "For each slotIndex from 0 to chestContainer.getLowerChestInventory().getSizeInventory()",
+        "action": "If slot has a non-null item stack: set chestEmpty=false, then if delay >= Delay setting: mc.playerController.windowClick(windowId, slotIndex, 0, 1, mc.thePlayer) [SHIFT_CLICK to move to player inventory], set delay=0",
+        "tick_increment": "If chest is not empty after iterating all slots: delay++"
+      },
+      "auto_close": {
+        "condition": "All slots in chest are empty (chestEmpty=true at end of loop)",
+        "action": "If Auto Close is enabled: mc.thePlayer.closeScreen()"
+      }
+    }
+  },
+  "chest_name_validation": {
+    "method": "((ContainerChest) mc.thePlayer.openContainer).getLowerChestInventory().getName()",
+    "accepted_names": ["Chest", "Large Chest", "Ender Chest"],
+    "note": "This check is case-sensitive and only runs when Custom Chest setting is false. When Custom Chest is true, any container name is accepted."
+  },
+  "dependencies": {
+    "internal": [
+      "cryptix.Client (settingsManager)",
+      "cryptix.gui.clickgui.Setting"
+    ],
+    "minecraft": [
+      "net.minecraft.client.gui.inventory.GuiChest",
+      "net.minecraft.inventory.ContainerChest",
+      "net.minecraft.inventory.Slot",
+      "net.minecraft.init.Blocks (used in import but not referenced in code)"
+    ]
+  },
+  "implementation_notes": [
+    "The module uses shift-click (mode=1) to move items from the chest into the player's inventory in one click.",
+    "Delay is measured in game ticks (20 ticks = 1 second). Start Delay and Delay are separate: start delay only counts at the beginning, per-item delay resets after each shift-click and increments until reaching the target.",
+    "The loop iterates ALL slots in the chest container, not just non-empty ones. Empty slots are skipped.",
+    "ChestEmpty is determined by checking getLowerChestInventory().getSizeInventory() slots - this is the bottom/fixed portion of a double chest container. The variable name inventory counts all slots.",
+    "Auto-close uses mc.thePlayer.closeScreen() which sends a C0DPacketCloseWindow to the server.",
+    "This module does NOT reference any other client modules (unlike KillAura or NoSlow which cross-reference each other). It's self-contained.",
+    "GuiChest is only imported but not used in any instanceof check - the openContainer instanceof ContainerChest check is sufficient."
+  ]
+}

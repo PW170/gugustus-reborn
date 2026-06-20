@@ -1,0 +1,310 @@
+{
+  "module": "KillAura",
+  "client": "Cryptix 5.7.4",
+  "category": "COMBAT",
+  "description": "A fully featured KillAura module with multiple autoblock and rotation bypass modes for different anti-cheats.",
+  "base_class": {
+    "name": "Module",
+    "hooks": [
+      "onEnable()",
+      "onDisable()",
+      "onPreUpdate() - called every tick before movement",
+      "onPreMotion() - called at the start of a movement packet",
+      "onPostMotion() - called after a movement packet is sent",
+      "onSprint() - called when sprinting state changes",
+      "onPreInput() - called before movement input is processed",
+      "onRender2D() - called for 2D screen rendering",
+      "onRender3D() - called for 3D world rendering",
+      "onEvent(Event e) - called for custom events (e.g., PacketReceiveEvent)"
+    ],
+    "helper_methods": [
+      "sendPacket(Packet p) - sends a packet through the player's network queue",
+      "getUppercaseSuffix(String name) - returns formatted suffix for display name",
+      "getDisplayName() / setDisplayName(String)",
+      "isToggled() / toggle() / setToggled(boolean)"
+    ]
+  },
+  "fields": {
+    "validTargets": "ArrayList<EntityLivingBase> - pool of entities within attack range",
+    "target": "EntityLivingBase - current target being attacked",
+    "oldTarget": "EntityLivingBase - previous target (used for rotation reset detection)",
+    "lastTarget": "EntityLivingBase - most recently selected target (used for switch delay logic)",
+    "lastSwitchTime": "long - timestamp of last target switch",
+    "lastAttackTime": "long - timestamp of last attack",
+    "blocking": "boolean - whether we are currently blocking (holding right click state)",
+    "blinking": "boolean - whether blink packet queue is active",
+    "swapped": "boolean - whether held item slot was swapped for bypass",
+    "b2": "boolean - flag for Hypixel3 delayed blink/block sequencing",
+    "b3": "boolean - flag indicating blink is active for certain autoblock modes",
+    "unblock": "boolean - unused flag",
+    "postBlock": "boolean - flag controlling block timing for Hypixel3 sequences",
+    "blockTick": "int - tick counter while blocking",
+    "rotTick": "int - tick counter for rotations (used for rotation delay)",
+    "asw": "int - state machine counter for multi-tick autoblock sequences",
+    "attack": "int - attack counter within a blocking sequence",
+    "nextTick": "int - negative value used as flag to slow movement in preInput",
+    "reached": "int - attack counter for Hypixel reach bypass",
+    "reduce": "int - unused velocity reduction counter"
+  },
+  "settings": {
+    "type_system": {
+      "Slider": "double value with min, max, optional integer-only mode",
+      "CheckBox": "boolean toggle",
+      "ModeBox": "String selection from a list of options"
+    },
+    "sliders": [
+      { "name": "Min CPS", "default": 10.0, "min": 1.0, "max": 20.0, "integer": true },
+      { "name": "Max CPS", "default": 10.0, "min": 1.0, "max": 20.0, "integer": true },
+      { "name": "Attack Range", "default": 3.0, "min": 3.0, "max": 10.0, "integer": false },
+      { "name": "Block Range", "default": 3.0, "min": 3.0, "max": 10.0, "integer": false },
+      { "name": "Rotation Range", "default": 3.0, "min": 3.0, "max": 10.0, "integer": false },
+      { "name": "Switch Delay", "default": 150.0, "min": 0.0, "max": 1000.0, "integer": true },
+      { "name": "Hypixel Reach", "default": 3.1, "min": 3.1, "max": 3.5, "decimal_places": 1 }
+    ],
+    "checkboxes": [
+      { "name": "Rotate Body", "default": false },
+      { "name": "TargetESP", "default": false },
+      { "name": "Sword Only", "default": false },
+      { "name": "Teams", "default": true },
+      { "name": "Movefix", "default": false },
+      { "name": "Delay While Attacking", "default": false },
+      { "name": "Raycast", "default": false },
+      { "name": "Switch On Attack", "default": false },
+      { "name": "Hypixel Reach Bypass", "default": false }
+    ],
+    "mode_boxes": [
+      {
+        "name": "Autoblock",
+        "default": "None",
+        "options": ["None", "Fake", "Vanilla", "BlocksMC", "Hypixel", "Hypixel2", "Hypixel3", "NCP", "Vulcan", "Legit"],
+        "description": "BlocksMC, Hypixel, Hypixel2, Hypixel3, Vulcan, and Legit are advanced bypass modes using packet queuing (blink) and item swapping"
+      },
+      {
+        "name": "Rotations",
+        "default": "Normal",
+        "options": ["None", "Normal", "Hypixel", "Grim", "Vulcan"],
+        "description": "Methods for calculating and applying look rotations to face targets"
+      }
+    ]
+  },
+  "target_selection": {
+    "algorithm": "onPreUpdate() each tick, scans mc.theWorld.loadedEntityList",
+    "filters": [
+      "Must be instanceof EntityLivingBase",
+      "Not the local player",
+      "Not flagged by AntiBot.isBot(entity)",
+      "Not on same team (if Teams setting is enabled) - uses Utils.teamMate() which checks isOnSameTeam + name prefix match",
+      "Inventory must not be open (mc.currentScreen !instanceof GuiInventory)",
+      "If Sword Only enabled, player must be holding a sword",
+      "Not a friend (Client.instance.commandManager.friend.isFriend(entity.getName()))",
+      "Only EntityPlayer, EntityMob, or EntityAnimal types allowed"
+    ],
+    "priority": {
+      "step_1": "Entities within Attack Range are added to validTargets list",
+      "step_2": "If validTargets is empty, falls back to the nearest entity within max(range) (extended range target)",
+      "step_3": "If lastTarget is null, or switch delay elapsed (and Switch On Attack is off), or lastTarget is invalid, pick random from validTargets",
+      "note": "When Switch On Attack is on, target switching only happens in the attack() method, not in getTarget()"
+    },
+    "range_check": "isTargetInRange() uses raycast-based distance check: creates a Vec3 from eye position in the direction of rotations, then checks if the line intersects the target's bounding box within range"
+  },
+  "rotation_modes": {
+    "shared_behavior": {
+      "onPreMotion()": "If target exists and within rotation range and bednuker is not rotating, increment rotTick and apply rotation",
+      "rotation_apply": "Sets mc.thePlayer.rotationYawHead and mc.thePlayer.rotationPitchHead (NOT the player's actual rotationYaw/rotationPitch)",
+      "body_rotation": "If Rotate Body enabled, also sets renderYawOffset to follow rotationYawHead smoothly (clamped to -75/+75 with 0.3 lerp)"
+    },
+    "None": "No rotation applied (early return)",
+    "Normal": "Uses getRotationFromPosition() -> applyGCD() -> sets head rotations",
+    "Hypixel": {
+      "calculation": "Uses prediction (e.pos - e.lastTickPos) for leading, targets slightly below eye level (y - 3.25 + eyeHeight), special quadrant handling for yaw",
+      "note": "Rotations are calculated inside RotationUtils.getRotations(), not in KillAura itself"
+    },
+    "Vulcan": {
+      "calculation": "Same position math as Hypixel but with yaw smoothing: clamps yaw change to max 90 + random per tick"
+    },
+    "Grim": {
+      "calculation": "Normal rotation calculation but only applies if yaw/pitch change exceeds 20-degree threshold (prevents micro-rotations)"
+    },
+    "gcd_fix": "applyGCD() is applied to all rotation modes. It quantizes rotation deltas using mouse sensitivity formula: f = sens * 0.6 + 0.2, gcd = f^3 * 8, then yawDelta = (rot - current) / 0.15, delta = (int)delta, final = current + delta * 0.15"
+  },
+  "autoblock_modes": {
+    "general_note": "All autoblock modes check isTargetInRange(target, blockRange) && holdingSword() before executing. The block() method sends C08PacketPlayerBlockPlacement with the held item, toggling block state. The unblock() method sends C07PacketPlayerDigging with Action.RELEASE_USE_ITEM.",
+    "None": "No blocking behavior. Falls through to the generic attack logic.",
+    "Fake": "No blocking behavior. Same as None.",
+    "Vanilla": {
+      "description": "Sends block placement packet every tick while target is in range.",
+      "behavior": "onPreUpdate(): if target in block range and holding sword, sends C08PacketPlayerBlockPlacement(mc.thePlayer.getHeldItem()). Does NOT manage unblocking.",
+      "attack": "Handled by the generic attack logic below"
+    },
+    "NCP": {
+      "description": "Blocks in onPostMotion() and unblocks in onPreUpdate() each tick.",
+      "block_timing": "onPostMotion(): if target in block range and holding sword, calls block() -> sends C08PacketPlayerBlockPlacement",
+      "unblock_timing": "onPreUpdate(): calls unblock() -> sends C07PacketPlayerDigging RELEASE_USE_ITEM",
+      "attack": "Handled by the generic attack logic"
+    },
+    "Vulcan": {
+      "description": "Blocks while not attacking, unblocks to attack. Uses blink to hide packets.",
+      "sequence": [
+        "Start: b3 = true, start blink",
+        "If currently blocking: increment blockTick, unblock(), increment attack counter",
+        "If not blocking: if attack < 4 and target in attack range, attack + set motion to 0.97",
+        "Otherwise: reset attack to 0, block(), stop blink"
+      ],
+      "packets": "Uses BlinkUtils to queue packets while unblocking, then releases them when blocking resumes"
+    },
+    "Legit": {
+      "description": "Similar to Vulcan but with simpler CPS calculation (average of min/max) and delay-based attack timing.",
+      "sequence": [
+        "If blocking: increment blockTick, blink(true), unblock()",
+        "If not blocking: calc CPS as (minCPS + maxCPS) / 2, delay = 1000/CPS",
+        "Wait for attack delay, then attack if in range",
+        "Block, stop blink (unless lagrange blinking)"
+      ]
+    },
+    "BlocksMC": {
+      "description": "3-tick state machine: attack+block -> swap item -> swap back. Uses blink to hide the item swap.",
+      "state_machine": {
+        "tick_1_(asw=0)": "Increment attack. If target in attack range and rotTick>0: rayTrace target for precise hit detection, send C02PacketUseEntity with hitVec, send C02PacketUseEntity INTERACT. Block. Stop blink.",
+        "tick_2_(asw=1)": "Start blink. Send C09PacketHeldItemChange((currentSlot + 1) % 9). swapped = true.",
+        "tick_3_(asw=2)": "Start blink. Send C09PacketHeldItemChange(currentSlot). If blocking, unblock. swapped = false. asw = 0 (loop)."
+      },
+      "movement_input": "If target in block range and holding sword and nextTick < 0: strafe *= 0.2, forward *= 0.2, sprint timer = 0",
+      "sprint": "Disabled via KeyBinding.setKeyBindState(sprint, false) on every tick"
+    },
+    "Hypixel": {
+      "description": "2-tick state machine: unblock+swap -> swap back+attack+block. Uses blink.",
+      "state_machine": {
+        "tick_1_(asw=0)": "b3=true, blink(true). Increment attack counter. Pick random slot (0-8) different from current. If blocking, unblock. asw=1.",
+        "tick_2_(asw=1)": "If target in attack range (with optional reach bypass): attack(entity, interact=true). Else if in rotation range: swingItem(). Block. Stop blink. Start blink. asw=0."
+      },
+      "movement_input": "Same as BlocksMC (strafe*=0.2, forward*=0.2) when nextTick < 0"
+    },
+    "Hypixel2": {
+      "description": "5-tick state machine: unblock+swap -> swap back -> wait -> wait -> attack+block. More delays for stricter anti-cheats.",
+      "state_machine": {
+        "tick_1_(asw=0)": "b3=true, blink(true). Increment attack. Random slot swap (C09PacketHeldItemChange). If blocking, unblock. swapped=true. asw=1.",
+        "tick_2_(asw=1)": "If swapped: send C09PacketHeldItemChange(original slot). swapped=false. asw=2.",
+        "tick_3_(asw=2)": "asw=3. Only continue if postBlock is true, else break.",
+        "tick_4_(asw=3)": "asw=4. Only continue if postBlock is true, else break.",
+        "tick_5_(asw=4)": "Attack if in range (with reach bypass and not bednuking). Block. Set b2=true. postBlock = (attack % 2 == 0). asw=0."
+      }
+    },
+    "Hypixel3": {
+      "description": "3-tick state machine with more nuanced blink/block control.",
+      "state_machine": {
+        "tick_1_(asw=0)": "b3=true. If postBlock: block + stopBlink. Start blink. Increment attack. If blocking and !postBlock: unblock. asw=1.",
+        "tick_2_(asw=1)": "If blocking: unblock. asw=2.",
+        "tick_3_(asw=2)": "Attack if in range (with reach bypass and not bednuking). Set postBlock=false. nextTick=-1. Block. If not lagrange blinking: set b2=true. asw=0."
+      },
+      "onSprint_hook": "If b2=true and autoblock=Hypixel3: block(), stopBlink(), startBlink(), b2=false",
+      "movement_input": "Same slow-down as other Hypixel/BlocksMC modes when nextTick < 0"
+    }
+  },
+  "attack_mechanics": {
+    "generic_attack_(non-autoblock_modes)": {
+      "condition": "target in attack range (or reach bypass range if applicable) AND CPS delay elapsed AND autoblock is not one of the special modes (BlocksMC, Legit, Vulcan, Hypixel, Hypixel2, Hypixel3)",
+      "call": "attack(target, false)",
+      "note": "CPS delay = 1000 / random(minCPS..maxCPS+7). If minCPS > maxCPS, they are swapped."
+    },
+    "attack_method": {
+      "signature": "attack(EntityLivingBase e, boolean interact)",
+      "pre_checks": [
+        "If Velocity module is delaying and Delay While Attacking is off: return early",
+        "If BedNuker has a target (bedPos != null): return early"
+      ],
+      "raycast_check": "If Raycast setting is on: cast a ray from player eyes at head yaw/pitch. Only attack if the ray hits an ENTITY (not a block).",
+      "execution": [
+        "mc.thePlayer.swingItem()",
+        "mc.playerController.attackEntity(mc.thePlayer, e) - calls the vanilla attack method (sends C02PacketUseEntity ACTION_ATTACK)",
+        "If interact=true: send C02PacketUseEntity(e, Vec3(0,0,0)) then C02PacketUseEntity(e, INTERACT) - this is for hit registration on some servers"
+      ],
+      "switch_on_attack": "If Switch On Attack is on: pick a new random target from validTargets (removing lastTarget first if multiple targets exist) and update lastSwitchTime"
+    },
+    "velocity_handling": {
+      "description": "onEvent catches PacketReceiveEvent for S12PacketEntityVelocity. When velocity is received for the local player, sets reduce=3 (unused counter in this module)."
+    }
+  },
+  "block_unblock_methods": {
+    "block()": {
+      "packet": "C08PacketPlayerBlockPlacement(mc.thePlayer.getHeldItem())",
+      "state": "sets this.blocking = true"
+    },
+    "unblock()": {
+      "packet": "C07PacketPlayerDigging(Action.RELEASE_USE_ITEM, BlockPos.ORIGIN, EnumFacing.DOWN)",
+      "state": "sets this.blocking = false"
+    }
+  },
+  "blink_utils_reference": {
+    "purpose": "Queues outgoing packets while active, then releases them when stopped. Used to hide sequences of packets (item swaps, unblock+block) from the server.",
+    "startBlink()": "Sets blinking=true. Subsequent packets are queued in a ConcurrentLinkedDeque<Packet<?>> instead of being sent.",
+    "stopBlink()": "Sets blinking=false. Releases ALL queued packets via network manager, clears the queue.",
+    "stopBlinkNoC03()": "Releases all packets EXCEPT C03PacketPlayer types, then stops blink.",
+    "releaseOne()": "Releases packets one at a time until a C03PacketPlayer variant is encountered (used for ladder placement).",
+    "note": "Somewhere in the net handler, when blinking=true, packets are diverted to the queue instead of being sent."
+  },
+  "target_esp": {
+    "method": "EspUtils.drawKillAuraRing(entity, 0.6f, 255)",
+    "description": "Draws a pulsing ring (circle) at the target's feet that bounces up and down using a sine wave over 2 seconds. Color comes from the HUD color settings."
+  },
+  "reset_logic": {
+    "when": "Called when target becomes null, bednuker is rotating, or target is out of block/sword range",
+    "what_it_does": [
+      "blockTick = 0, attack = 0",
+      "If swapped: swap back to original slot (C09PacketHeldItemChange), set swapped=false",
+      "If autoblock is Hypixel/Hypixel2 and blocking: blink(true), random slot swap, unblock, increment asw",
+      "Else if b3 is true: stopBlink, b3=false, asw=0",
+      "If blocking: unblock()",
+      "rotTick = 0"
+    ]
+  },
+  "event_flow_in_client": {
+    "client_main_loop": {
+      "onPreUpdate": "Calls KillAura.onPreUpdate() LAST (after all other modules). Also calls reset() if KillAura is not toggled.",
+      "onMotionEvent(type=0)": "Calls KillAura.onPreMotion() first, then other modules",
+      "onMotionEvent(type=1)": "Calls KillAura.onPostMotion() as part of all modules",
+      "onMotionEvent(type=2)": "Calls KillAura.onSprint() as part of all modules",
+      "onInputEvent(type=0)": "Calls KillAura.onPreInput() as part of all modules",
+      "onRender(type=0)": "Calls KillAura.onRender3D() for target ESP ring"
+    }
+  },
+  "mc_version": "1.8.x (uses Minecraft.getMinecraft(), EntityLivingBase, net.minecraft.network.play.client.* packets)",
+  "dependencies": {
+    "internal_classes": [
+      "cryptix.Client (static instance, movefix flag, moduleManager, settingsManager)",
+      "cryptix.module.Module (base class with hooks)",
+      "cryptix.gui.clickgui.Setting (setting system)",
+      "cryptix.utils.RotationUtils (rotation calculations, raycasting)",
+      "cryptix.utils.BlinkUtils (packet queuing)",
+      "cryptix.utils.Utils (holdingSword(), teamMate(), random, setMotion())",
+      "cryptix.utils.render.EspUtils (drawKillAuraRing)",
+      "cryptix.module.combat.AntiBot (isBot check)",
+      "cryptix.other.event.Event / PacketReceiveEvent"
+    ],
+    "minecraft_classes": [
+      "net.minecraft.client.Minecraft",
+      "net.minecraft.client.settings.KeyBinding",
+      "net.minecraft.entity.Entity",
+      "net.minecraft.entity.EntityLivingBase",
+      "net.minecraft.entity.monster.EntityMob",
+      "net.minecraft.entity.passive.EntityAnimal",
+      "net.minecraft.entity.player.EntityPlayer",
+      "net.minecraft.network.play.client.C02PacketUseEntity (ACTION_ATTACK, INTERACT, hitVec variants)",
+      "net.minecraft.network.play.client.C07PacketPlayerDigging (RELEASE_USE_ITEM)",
+      "net.minecraft.network.play.client.C08PacketPlayerBlockPlacement",
+      "net.minecraft.network.play.client.C09PacketHeldItemChange",
+      "net.minecraft.network.play.server.S12PacketEntityVelocity",
+      "net.minecraft.util.AxisAlignedBB, BlockPos, EnumFacing, MathHelper, MovingObjectPosition, Vec3",
+      "net.minecraft.client.gui.inventory.GuiInventory"
+    ]
+  },
+  "implementation_notes": [
+    "The module extends an abstract Module class that provides sendPacket(), isToggled(), toggle(), display name management, and lifecycle hooks (onEnable/onDisable/onPreUpdate/etc).",
+    "Settings are registered with a global SettingsManager via Client.instance.settingsManager.addSetting().",
+    "Target selection runs every tick in onPreUpdate(). Target locking persists across ticks via lastTarget field.",
+    "The display name shows the current autoblock mode as a suffix (e.g., 'KillAura §7 Hypixel').",
+    "All autoblock modes that use blink rely on BlinkUtils to queue packets temporarily, which must be integrated with the net handler's packet send pipeline.",
+    "CPS randomization: minCPS + random.nextInt(maxCPS - minCPS + 8) provides jitter between min and max+7.",
+    "Movefix: sets a static boolean Client.movefix = true, which causes the input handler to remap movement inputs to match the modified yaw (prevents players from strafing in wrong directions with silent rotations).",
+    "The bednuker module is checked frequently - KillAura disables its own targeting/attacking when bednuker is active (targeting a bed)."
+  ]
+}

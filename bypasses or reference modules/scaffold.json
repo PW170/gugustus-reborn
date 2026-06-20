@@ -1,0 +1,62 @@
+﻿{
+  "module": "Scaffold",
+  "source": "myau/module/modules/Scaffold.java",
+  "constructor": "super(\"Scaffold\", false)",
+  "properties": [
+    { "name": "rotationMode", "type": "ModeProperty", "options": ["NONE","DEFAULT","BACKWARDS","SIDEWAYS","GODBIRGDE","SMOOTH","Hypixel","SNAP"] },
+    { "name": "moveFix", "type": "ModeProperty", "options": ["NONE","SILENT"] },
+    { "name": "sprintMode", "type": "ModeProperty", "options": ["NONE","VANILLA"] },
+    { "name": "groundMotion", "type": "PercentProperty", "default": 100 },
+    { "name": "airMotion", "type": "PercentProperty", "default": 100 },
+    { "name": "speedMotion", "type": "PercentProperty", "default": 100 },
+    { "name": "tower", "type": "ModeProperty", "options": ["NONE","VANILLA","EXTRA","TELLY"] },
+    { "name": "hypixeltower", "type": "BooleanProperty", "default": false },
+    { "name": "safe", "type": "BooleanProperty", "default": false },
+    { "name": "safeStuckDelayTicksProperty", "type": "IntProperty", "default": 1 },
+    { "name": "keepY", "type": "ModeProperty", "options": ["NONE","VANILLA","EXTRA","TELLY","EXTRATELLY"] },
+    { "name": "keepYonPress", "type": "BooleanProperty", "default": false },
+    { "name": "disableWhileJumpActive", "type": "BooleanProperty", "default": false },
+    { "name": "multiplace", "type": "BooleanProperty", "default": true },
+    { "name": "safeWalk", "type": "BooleanProperty", "default": true },
+    { "name": "swing", "type": "BooleanProperty", "default": true },
+    { "name": "itemSpoof", "type": "BooleanProperty", "default": false },
+    { "name": "blockCounter", "type": "BooleanProperty", "default": true },
+    { "name": "eagle", "type": "BooleanProperty", "default": false },
+    { "name": "edgeDistance", "type": "FloatProperty", "default": 0.13 },
+    { "name": "sneakDelay", "type": "IntProperty", "default": 80 },
+    { "name": "blocksPerSneak", "type": "IntProperty", "default": 1 },
+    { "name": "tellystartrotationminspeed", "type": "FloatProperty", "default": 90.0 },
+    { "name": "tellystartrotationmaxspeed", "type": "FloatProperty", "default": 95.0 },
+    { "name": "tellynormalrotationminspeed", "type": "FloatProperty", "default": 30.0 },
+    { "name": "tellynormalrotationmaxspeed", "type": "FloatProperty", "default": 35.0 }
+  ],
+  "eventHandlers": [
+    "onUpdate(UpdateEvent) - PRE: rotation calculation, block data scan, block placement, multi-place, keepY",
+    "onStrafe(StrafeEvent) - VANILLA/EXTRA tower motion, safeStuck speed cancel",
+    "onMoveInput(MoveInputEvent) - movefix, keepY auto-jump, eagle sneak",
+    "onLivingUpdate(LivingUpdateEvent) - safeStuck freeze, speed modification, sprint stop, telly safe mode detection",
+    "onSafeWalk(SafeWalkEvent) - edge safe-walk toggle",
+    "onRender(Render2DEvent) - block counter HUD overlay",
+    "onLeftClick(LeftClickMouseEvent) - cancel left click interaction",
+    "onRightClick(RightClickMouseEvent) - cancel right click interaction",
+    "onHitBlock(HitBlockEvent) - cancel block hit",
+    "onSwap(SwapItemEvent) - item spoof slot swap tracking"
+  ],
+  "towerModes": {
+    "VANILLA": "4-stage motion cycle: -0.0784 pre-drop, 0.42 jump, fractional height compensations",
+    "EXTRA": "5-stage with diagonal edge alignment, jitter offsets, delay counter, fall-back detection",
+    "TELLY": "Safe mode with velocity-based stuck detection via blink manager"
+  },
+  "rotationModes": {
+    "NONE": "No rotation override",
+    "DEFAULT": "Quantized diagonal yaw at 85 pitch",
+    "BACKWARDS": "Quantized yawDiffTo180 at 85 pitch",
+    "SIDEWAYS": "Quantized diagonal yaw at 85 pitch",
+    "GODBIRGDE": "Snaps to nearest 45-degree diagonal, 79.3 pitch for godbridging",
+    "SMOOTH": "Gradual yaw/pitch interpolation with configurable speed ranges (telly rotation)",
+    "Hypixel": "Same as SIDEWAYS",
+    "SNAP": "Quantized yaw/pitch with duplicate rotation avoidance and micro-adjustment stepping"
+  },
+  "innerClasses": ["BlockData(BlockPos blockPos, EnumFacing facing)"],
+  "description": "Automatically places blocks beneath you while walking — a core bridging and building assist module"
+}

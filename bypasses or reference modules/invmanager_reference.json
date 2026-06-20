@@ -1,0 +1,87 @@
+{
+  "module": "InvManager",
+  "client": "Cryptix 5.7.4",
+  "category": "PLAYER",
+  "description": "Automatically manages the player's inventory: equips best gear, organizes hotbar slots (sword, blocks, gapples), drops trash and duplicate/worse items.",
+  "hooks_used": ["onPreMotion"],
+  "fields": {
+    "ticks": "int - tick counter for operation delay, increments each onPreMotion call while inventory is open",
+    "startTicks": "int - tick counter for initial startup delay before any operations begin"
+  },
+  "settings": {
+    "sliders": [
+      { "name": "Start Delay", "default": 1, "min": 0, "max": 10, "integer": true, "unit": "ticks before first operation" },
+      { "name": "Delay", "default": 1, "min": 0, "max": 10, "integer": true, "unit": "ticks between individual operations" },
+      { "name": "Sword Slot", "default": 1, "min": 1, "max": 9, "integer": true, "unit": "hotbar slot for sword (1-9)" },
+      { "name": "Block Slot", "default": 2, "min": 1, "max": 9, "integer": true, "unit": "hotbar slot for blocks" },
+      { "name": "Gapple Slot", "default": 3, "min": 1, "max": 9, "integer": true, "unit": "hotbar slot for golden apples" }
+    ],
+    "checkboxes": [
+      { "name": "Random Delay", "default": true, "description": "20% chance to skip each operation tick (adds randomization)" },
+      { "name": "Drop Trash", "default": true, "description": "Drops items matching the trash list" },
+      { "name": "Drop Tools", "default": false, "description": "Drops tools (shovels, axes, pickaxes)" },
+      { "name": "Ignore Low Durability Sword", "default": false, "description": "Skips swords with less than 20 durability remaining" }
+    ]
+  },
+  "per_tick_operations": {
+    "condition": "mc.currentScreen instanceof GuiInventory (the player's own inventory, not a chest)",
+    "start_delay": "If startTicks < startDelay setting, return early without any operations",
+    "delay_check": "If ticks < delay setting value, return early (enforces delay between operations)",
+    "random_skip": "If Random Delay is on and Math.random() > 0.8, return early (20% random skip)",
+    "order_of_operations": [
+      { "step": 1, "name": "getSword", "description": "If hotbar sword slot (inv slot 36) is empty or not the best sword, find and swap the best sword into that slot" },
+      { "step": 2, "name": "getBestArmor", "description": "Equip best armor pieces (helmet/chestplate/leggings/boots) via shift-click from inventory" },
+      { "step": 3, "name": "dropLeftSword", "description": "Drop duplicate swords (keep only the single best sword), drop armor that isn't the best for its slot" },
+      { "step": 4, "name": "dropTrash", "description": "Drop items matching trash criteria from inventory slots 9-44" },
+      { "step": 5, "name": "dropTools", "description": "If Drop Tools enabled, drop all tools from slots 9-44" },
+      { "step": 6, "name": "getBestGap", "description": "If gapple hotbar slot is empty, find and swap a golden apple there" },
+      { "step": 7, "name": "getBestBlock", "description": "If block hotbar slot is empty, find and swap the largest stack of solid blocks there" }
+    ]
+  },
+  "helper_methods": {
+    "swap(slot1, slot2)": "Calls mc.playerController.windowClick(windowId, slot1, slot2, 2, mc.thePlayer) - the '2' is the SWAP mode. Sets ticks=0 after.",
+    "shiftClick(slot)": "Calls mc.playerController.windowClick(windowId, slot, 0, 1, mc.thePlayer) - the '1' is SHIFT_CLICK mode. Sets ticks=0 after.",
+    "drop(slot)": "Calls mc.playerController.windowClick(windowId, slot, 1, 4, mc.thePlayer) - the '4' is DROP mode with button 1 (drop entire stack). Sets ticks=0 after.",
+    "getSwordDamage(ItemStack)": "Returns ((ItemSword)stack.getItem()).getDamageVsEntity() - base sword damage.",
+    "getDamage(ItemStack)": "Calculates total sword damage = base attackDamage + sharpness*1.25 + fireAspect*2.0. If durability is below 1/3 of max, subtracts 3.0 (damage penalty for worn swords).",
+    "isBestSword(ItemStack)": "Scans inventory slots 9-44. Returns true if this stack is an ItemSword and no other sword has higher getDamage().",
+    "hasEnoughDurability(ItemStack)": "Returns (maxDamage - itemDamage > 20) OR Ignore Low Durability option is off.",
+    "isBestArmor(ItemStack, type)": "Checks if stack's unlocalized name contains the type string (helmet/chestplate/leggings/boots). Then scans slots 5-44: returns false if any other item of the same armor type has higher getProtection().",
+    "getProtection(ItemStack)": "Calculates armor protection = damageReduceAmount + (100-damageReduceAmount)*protLevel*0.0075 + blastProt/100 + fireProt/100 + thorns/100 + unbreaking/50.",
+    "isBlock(ItemStack)": "True if ItemBlock and the block is a full solid block (isFullBlock()) and not sand or gravel.",
+    "isTrash(ItemStack)": "True if unlocalized name contains: diamond, web, work, blaze, chest, seeds, tnt, cobblestone, spawn, cobweb, piston, redstone, egg, flint, snow, fish, string, stick, bucket OR item is ItemExpBottle.",
+    "isTool(ItemStack)": "True if unlocalized name contains 'shovel' OR item is ItemAxe OR ItemPickaxe."
+  },
+  "hotbar_slot_mapping": {
+    "note": "The player's inventory container has slots 0-8 for crafting, 9-35 for main inventory, 36-44 for hotbar (36=hotbar slot 1, 37=slot 2, ..., 44=slot 9). Settings use 1-indexed hotbar slots.",
+    "sword_slot_setting_value": "target hotbar index = value - 1 -> inv slot = target + 36",
+    "block_slot_setting_value": "same formula - hotbar slot 1 = inv slot 36",
+    "gapple_slot_setting_value": "same formula"
+  },
+  "dependencies": {
+    "internal": [
+      "cryptix.Client (settingsManager)",
+      "cryptix.gui.clickgui.Setting"
+    ],
+    "minecraft": [
+      "net.minecraft.client.gui.inventory.GuiInventory",
+      "net.minecraft.inventory.Slot",
+      "net.minecraft.item.Item, ItemStack",
+      "net.minecraft.item.ItemAppleGold, ItemArmor, ItemAxe, ItemBlock, ItemExpBottle, ItemGlassBottle, ItemPickaxe, ItemSword",
+      "net.minecraft.init.Blocks",
+      "net.minecraft.enchantment.Enchantment, EnchantmentHelper",
+      "net.minecraft.block.Block"
+    ]
+  },
+  "implementation_notes": [
+    "All inventory actions (swap, shiftClick, drop) go through the same delay gate: they only execute if ticks >= delay setting, then reset ticks to 0. This ensures one action per delay interval.",
+    "The Random Delay setting adds variance: each tick has an 80% chance to continue normally and a 20% chance to skip entirely. This makes the pattern appear more human.",
+    "Armor types in Minecraft: type 1=helmet(slot 5), 2=chestplate(slot 6), 3=leggings(slot 7), 4=boots(slot 8). These are the armor slots in the container.",
+    "When equipping armor (getBestArmor), if the current armor slot already has the best piece, it's kept. If not, the bad piece is dropped and the best piece from inventory is shift-clicked.",
+    "getBestBlock finds the largest stack (not any specific block type, just highest stackSize) meeting the isBlock criteria.",
+    "Sword damage calculation includes enchantments: Sharpness adds +1.25 per level, Fire Aspect adds +2.0 per level (unconventional weighting).",
+    "Durability penalty simulates vanilla behavior where damaged swords deal less damage. Applied when itemDamage*3 > maxItemUseDuration.",
+    "dropLeftSword() works in two passes: first pass identifies one best sword and marks it, second pass drops all other swords. Also drops any armor that isn't best-for-slot.",
+    "The module only runs when the player's own inventory screen (GuiInventory) is open, not chests or other containers."
+  ]
+}

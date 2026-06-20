@@ -1,0 +1,78 @@
+{
+  "module": "InvMove",
+  "client": "Cryptix 5.7.4",
+  "category": "MOVEMENT",
+  "description": "Allows the player to walk while their inventory or a GUI container is open. Handles movement key presses directly.",
+  "hooks_used": ["onPreUpdate", "onPreInput", "onEvent(PacketSendEvent)"],
+  "fields": {
+    "ticks": "int - counts total ticks since module start, reset to 0 when a C0EPacketClickWindow is sent",
+    "stopMoving": "boolean - true for the first 10 ticks after a click window packet (or until ticks>=10), used by Hypixel mode to stop movement briefly after interactions"
+  },
+  "settings": [
+    {
+      "name": "Mode",
+      "type": "ModeBox",
+      "default": "Standard",
+      "options": ["Standard", "Hypixel"],
+      "description": "Standard = full movement in inventory. Hypixel = stops movement briefly after each click window action to avoid flagging."
+    },
+    {
+      "name": "ClickGUI",
+      "type": "CheckBox",
+      "default": false,
+      "description": "If enabled, also allows movement when the client's ClickGUI screen is open"
+    }
+  ],
+  "behavior": {
+    "onPreUpdate": {
+      "description": "Polls keyboard state for movement keys and applies them directly via KeyBinding.setKeyBindState() every tick.",
+      "condition": "mc.currentScreen instanceof GuiContainer OR GuiInventory OR (ClickGUI enabled && mc.currentScreen instanceof ClickGUI)",
+      "keys_applied": [
+        "keyBindForward",
+        "keyBindBack",
+        "keyBindRight",
+        "keyBindLeft",
+        "keyBindJump"
+      ],
+      "method": "For each key, reads the real keyboard state via Keyboard.isKeyDown() and forces the KeyBinding's pressed state to match.",
+      "tick_tracking": "ticks++ each call. stopMoving = (ticks < 10 || not in GuiInventory)."
+    },
+    "onPreInput": {
+      "description": "Suppresses sprinting entirely while in a GUI. If Hypixel mode and stopMoving is true, zeroes movement input.",
+      "actions": [
+        "mc.thePlayer.setSprinting(false) - always disables sprint",
+        "mc.thePlayer.sprintToggleTimer = 0",
+        "If Hypixel mode and stopMoving: moveForward = 0, moveStrafe = 0"
+      ]
+    },
+    "onEvent(PacketSendEvent)": {
+      "description": "Watches for C0EPacketClickWindow packets to reset the tick counter and flag stopMoving (Hypixel mode only).",
+      "condition": "packet instanceof C0EPacketClickWindow",
+      "actions": [
+        "ticks = 0",
+        "If Hypixel mode: stopMoving = true (stops movement for next 10 ticks)"
+      ]
+    }
+  },
+  "dependencies": {
+    "internal": [
+      "cryptix.gui.clickgui.Setting",
+      "cryptix.gui.clickgui.ClickGUI (referenced as type check)",
+      "cryptix.other.event.Event (base class for PacketSendEvent)"
+    ],
+    "minecraft": [
+      "org.lwjgl.input.Keyboard (Keyboard.isKeyDown() for hardware key state)",
+      "net.minecraft.client.gui.inventory.GuiContainer",
+      "net.minecraft.client.gui.inventory.GuiInventory",
+      "net.minecraft.client.settings.KeyBinding",
+      "net.minecraft.network.play.client.C0EPacketClickWindow"
+    ]
+  },
+  "implementation_notes": [
+    "The core mechanic overrides the fact that Minecraft normally consumes movement key inputs when a GUI screen is open. By directly calling KeyBinding.setKeyBindState() with the raw keyboard state each tick, movement is restored.",
+    "Sprint is explicitly disabled (setSprinting(false)) because sprint mechanics don't work properly from inventory and could cause desync.",
+    "Hypixel mode adds a post-click movement freeze: after any C0EPacketClickWindow packet, movement is suppressed for 10 ticks via the stopMoving flag. This helps avoid anti-cheat flags on Hypixel where moving immediately after inventory actions is checked.",
+    "The display name shows the current mode as a suffix (e.g., 'InvMove §7 Hypixel').",
+    "Only GuiContainer/GuiInventory screens are supported for movement (plus ClickGUI optionally). Other screens like chat, death screen, etc. are not affected."
+  ]
+}
