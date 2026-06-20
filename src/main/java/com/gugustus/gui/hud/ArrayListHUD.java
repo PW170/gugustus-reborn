@@ -2,6 +2,7 @@ package com.gugustus.gui.hud;
 
 import com.gugustus.Gugustus;
 import com.gugustus.module.Module;
+import com.gugustus.module.visual.Interface;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
@@ -20,6 +21,9 @@ public class ArrayListHUD {
     @SubscribeEvent
     public void onRenderOverlay(RenderGameOverlayEvent.Text event) {
         if (mc.thePlayer == null || mc.theWorld == null) return;
+
+        Interface iface = Gugustus.moduleManager.getModule("Interface") instanceof Interface ? (Interface) Gugustus.moduleManager.getModule("Interface") : null;
+        if (iface != null && iface.isEnabled() && iface.moduleList.getValue()) return;
 
         ScaledResolution sr = new ScaledResolution(mc);
         FontRenderer fr = mc.fontRendererObj;

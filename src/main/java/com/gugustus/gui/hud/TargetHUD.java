@@ -1,11 +1,11 @@
 package com.gugustus.gui.hud;
 
+import com.gugustus.Gugustus;
+import com.gugustus.module.visual.Interface;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
@@ -21,6 +21,9 @@ public class TargetHUD {
     @SubscribeEvent
     public void onRenderOverlay(RenderGameOverlayEvent.Text event) {
         if (mc.thePlayer == null || mc.theWorld == null) return;
+
+        Interface iface = Gugustus.moduleManager.getModule("Interface") instanceof Interface ? (Interface) Gugustus.moduleManager.getModule("Interface") : null;
+        if (iface != null && iface.isEnabled() && iface.targetHud.getValue()) return;
 
         if (currentTarget == null || currentTarget.isDead) return;
 

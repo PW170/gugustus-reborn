@@ -10,6 +10,8 @@ import com.gugustus.module.player.Scaffold;
 import com.gugustus.module.movement.Flight;
 import com.gugustus.module.movement.NoSlow;
 import com.gugustus.module.movement.Sprint;
+import com.gugustus.module.visual.ClickGUI;
+import com.gugustus.module.visual.Interface;
 import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
@@ -45,7 +47,9 @@ public class ModuleManager {
             new Scaffold(),
             new Flight(),
             new NoSlow(),
-            new Sprint()
+            new Sprint(),
+            new Interface(),
+            new ClickGUI()
         };
 
         for (Module m : moduleArray) {
