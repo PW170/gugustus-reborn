@@ -9,6 +9,7 @@ import com.gugustus.module.player.InvMove;
 import com.gugustus.module.player.Scaffold;
 import com.gugustus.module.movement.Flight;
 import com.gugustus.module.movement.NoSlow;
+import com.gugustus.module.movement.Sprint;
 import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
@@ -43,7 +44,8 @@ public class ModuleManager {
             new InvMove(),
             new Scaffold(),
             new Flight(),
-            new NoSlow()
+            new NoSlow(),
+            new Sprint()
         };
 
         for (Module m : moduleArray) {
